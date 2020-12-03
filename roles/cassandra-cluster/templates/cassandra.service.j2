@@ -1,0 +1,22 @@
+[Unit]
+Description=Cassandra
+After=network.target
+
+[Service]
+RuntimeDirectory=cassandra
+PIDFile=/var/run/cassandra/cassandra.pid
+User=root
+Group=root
+Type=forking
+WorkingDirectory={{ cassandra_home }}
+ExecStart={{ cassandra_home }}/bin/cassandra -p /var/run/cassandra/cassandra.pid -R
+StandardOutput=journal
+StandardError=journal
+Restart=always
+TimeoutStopSec=180
+SuccessExitStatus=143
+
+
+[Install]
+WantedBy=multi-user.target
+

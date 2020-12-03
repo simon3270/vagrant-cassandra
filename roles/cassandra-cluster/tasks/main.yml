@@ -1,0 +1,144 @@
+
+# SELINUX is already in enforcing mode
+
+# Need to install Java 8 on a newly-created centos/7 node
+
+- name: Check if java 8 alread installed
+  command: java -version 2>&1 | grep version | awk '{print $3}' | sed 's/"//g'
+  register: java_version
+  ignore_errors: True
+  
+- debug:  msg="Java not installed"
+  when: java_version is failed
+  
+- name: installJava
+  yum:
+    name: java-1.8.0-openjdk
+    state: present
+  when: java_version is failed
+  
+- name: check java 8 installation worked
+  command: java -version 2>&1 | grep version | awk '{print $3}' | sed 's/"//g'
+  
+- name: set basic iptables rules
+  iptables:
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+  become: yes
+
+- name: Allow new incoming SYN packets on TCP port 22 (SSH)
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: 22
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: Allow new connections on Cassandra port
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ cassandra_port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: Allow new connections on RPC port
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ rpc_port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: Allow new connections on Storage port
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ storage_port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: Allow new connections on SSL Storage port
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ ssl_storage_port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: Allow new connections on JMX port
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: 7199
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+
+- name: check whether cassandra source already present
+  stat: 
+    path: /opt/apache-cassandra-3.11.9-bin.tar.gz
+  register: cassandra_source_file
+  
+- name: download the cassandra source
+  get_url: 
+    url: https://downloads.apache.org/cassandra/3.11.9/apache-cassandra-3.11.9-bin.tar.gz
+    dest: /opt/apache-cassandra-3.11.9-bin.tar.gz
+    mode: 0440
+  when: cassandra_source_file.stat.exists == False
+  
+- name: Get checksum of downloaded tarball
+  stat:
+    path: /opt/apache-cassandra-3.11.9-bin.tar.gz
+    checksum_algorithm: sha256
+  register: downloaded_file_checksum
+  
+- name: download checksum from apache page
+  uri: url=https://downloads.apache.org/cassandra/3.11.9/apache-cassandra-3.11.9-bin.tar.gz.sha256 return_content=yes
+  register: apache_page_checksum
+
+- name: Verify local checksum aginst Apache one
+  set_fact:
+    apache_page_checksum_trim: "{{ apache_page_checksum.content | trim }}"
+  failed_when: downloaded_file_checksum.stat.checksum != apache_page_checksum_trim
+  
+- name: Create home directory
+  file: 
+    path: "{{ cassandra_home }}"
+    state: directory
+    mode: 0755  
+    
+- name: Extract cassandra source
+  unarchive:
+    src: /opt/apache-cassandra-3.11.9-bin.tar.gz
+    dest: "{{ cassandra_home }}"
+    extra_opts: [--strip-components=1]
+    remote_src: yes  
+    
+- name: Export path
+  shell: "echo 'PATH=$PATH:{{ cassandra_path }}' > /etc/profile.d/custom-path.sh && . /etc/profile.d/custom-path.sh"
+  
+- name: install the configuration file
+  template: src=cassandra.yaml.j2 dest='{{ cassandra_home }}/conf/cassandra.yaml' mode=750
+  
+- name: copy the cassandra systemd unit file
+  template: src=cassandra.service.j2 dest=/etc/systemd/system/cassandra.service
+
+- name: start cassandra now, and start on boot
+  systemd: state=started enabled=yes name=cassandra daemon_reload=yes
+  notify:
+  - CheckClusterStatus
+  - GetClusterStatusOutput
+  - DisplayClusterStatusOutput
