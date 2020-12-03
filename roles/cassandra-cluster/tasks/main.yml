@@ -45,7 +45,7 @@
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new Cassandra connections
 
 - name: Allow new connections on RPC port
   iptables:
@@ -55,7 +55,7 @@
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new Cassandra RPC connections.
 
 - name: Allow new connections on Storage port
   iptables:
@@ -65,7 +65,7 @@
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new Cassandra storage connections.
 
 - name: Allow new connections on SSL Storage port
   iptables:
@@ -75,7 +75,7 @@
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new Cassandra SSL storage connections.
 
 - name: Allow new connections on JMX port
   iptables:
@@ -85,7 +85,10 @@
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new Cassandra JMX connections.
+
+- name: Save firewall rules
+  shell: iptables-save > /etc/sysconfig/iptables
 
 - name: check whether cassandra source already present
   stat: 
