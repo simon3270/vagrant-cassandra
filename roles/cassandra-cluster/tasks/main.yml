@@ -20,22 +20,40 @@
 - name: check java 8 installation worked
   command: java -version 2>&1 | grep version | awk '{print $3}' | sed 's/"//g'
   
-- name: set basic iptables rules
+- name: Make sure iptables can be saved
+  yum:
+    name: iptables-services
+    state: present
+
+- name: Ensure iptables service running
+  systemd: state=started enabled=yes name=iptables daemon_reload=yes
+  # Creates simple iptables config, including SSH, and a catch-all REJECT
+
+- name: Drop catchall rejection
   iptables:
     chain: INPUT
-    ctstate: ESTABLISHED,RELATED
-    jump: ACCEPT
-  become: yes
+    reject_with: icmp-host-prohibited
+    state: absent
 
-- name: Allow new incoming SYN packets on TCP port 22 (SSH)
+- name: Allow new incoming SYN packets on TCP port 80 (HTTP)
   iptables:
     chain: INPUT
     protocol: tcp
-    destination_port: 22
+    destination_port: 80
     ctstate: NEW
     syn: match
     jump: ACCEPT
-    comment: Accept new SSH connections.
+    comment: Accept new HTTP connections.
+
+- name: Allow new incoming SYN packets on TCP port 443 (HTTPS)
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: 443
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new HTTPS connections.
 
 - name: Allow new connections on Cassandra port
   iptables:
@@ -86,6 +104,11 @@
     syn: match
     jump: ACCEPT
     comment: Accept new Cassandra JMX connections.
+
+- name: Restore catchall rejection
+  iptables:
+    chain: INPUT
+    reject_with: icmp-host-prohibited
 
 - name: Save firewall rules
   shell: iptables-save > /etc/sysconfig/iptables
